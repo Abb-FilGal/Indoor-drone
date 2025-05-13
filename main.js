@@ -25,7 +25,7 @@
     return true;
   }
 
-  export function doBluetooth() {
+  function doBluetooth() {
     log("🔍 Trying to connect to Bluetooth...");
   
     if (!bleWorks()) return;
@@ -105,3 +105,7 @@
         log("❌ Error: " + error);
       });
   }
+
+window.doBluetooth = doBluetooth
+
+export default  doBluetooth
