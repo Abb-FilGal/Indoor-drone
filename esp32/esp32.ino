@@ -6,6 +6,9 @@
 #define MOTOR3 27
 #define MOTOR4 14
 
+const int MIN_THROTTLE = 1000;
+const int MAX_THROTTLE = 2000;
+
 int pitchTarget;
 int yawTarget;
 int rollTarget;

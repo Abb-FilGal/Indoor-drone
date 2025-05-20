@@ -1,8 +1,27 @@
 #include <Bluepad32.h>
+#include <ESP32Servo.h>
+
+#define MOTORRF 25
+#define MOTORRB 26
+#define MOTORLF 27
+#define MOTORLB 14
 
 ControllerPtr myController;
 
-#define MOTORRF 25
+
+const int minPof = 1150;
+const int maxPof = 2000;
+
+const int incrementStep = 5;
+
+
+
+struct {
+  Servo RF;
+  Servo RB; 
+  Servo LF;
+  Servo LB; 
+  } motor;
 
 struct {
   int pitch;
@@ -18,6 +37,15 @@ struct {
   int lift;
   } current;
 
+ struct {
+  int RF;
+  int LF;
+  int RB;
+  int LB;
+ } motorPof;
+
+
+ 
 // This callback gets called any time a new gamepad is connected.
 void onConnectedController(ControllerPtr ctl) {
         if (myController == nullptr) {
@@ -64,13 +92,30 @@ void dumpGamepad(ControllerPtr ctl) {
 void processGamepad(ControllerPtr ctl) {
   
     // prints controller status
-    // dumpGamepad(ctl);
+    dumpGamepad(ctl);
 
     // updates target values
-    target.pitch = ctl->axisY();
-    target.roll = ctl->axisX();
-    target.yaw = ctl->axisRX();
-    target.lift = ctl->throttle() - ctl->brake();
+    if (target.pitch > ctl->axisY() + incrementStep) {
+      target.pitch -= incrementStep; 
+    } else if (target.pitch < ctl-> axisY() - incrementStep) {
+      target.pitch += incrementStep;
+      }
+
+    if (target.roll > ctl->axisX() + incrementStep) {
+      target.roll -= incrementStep;
+    } else if (target.roll < ctl->axisX() - incrementStep) {
+      target.roll += incrementStep;
+      }
+      if (target.yaw > ctl->axisRX() + incrementStep) {
+      target.yaw -= incrementStep;
+    } else if (target.yaw < ctl->axisRX() - incrementStep) {
+      target.yaw += incrementStep;
+      }
+      if (target.lift > ctl->throttle()-ctl->brake() + incrementStep) {
+      target.lift -= incrementStep;
+    } else if (target.lift < ctl->throttle() - ctl->brake() - incrementStep) {
+      target.lift += incrementStep;
+      }
 }
 
 void processControllers() {
@@ -82,6 +127,52 @@ void processControllers() {
             }
         }
 }
+
+void writeToMotors(){
+  motor.RF.writeMicroseconds(motorPof.RF);
+  motor.LF.writeMicroseconds(motorPof.LF);
+  motor.RB.writeMicroseconds(motorPof.RB);
+  motor.LB.writeMicroseconds(motorPof.LB);
+}
+
+void motorSetup() {
+  motor.RF.attach(MOTORRF);
+  motor.LF.attach(MOTORLF);
+  motor.RB.attach(MOTORRB);
+  motor.LB.attach(MOTORLB);
+
+  motorPof.RF = 1000;
+  motorPof.LF = 1000;
+  motorPof.RB = 1000;
+  motorPof.LB = 1000;
+
+  writeToMotors();
+
+  delay(2000);  // Wait for arming sequence
+
+  writeToMotors();
+
+  delay(1000);  // Wait for arming sequence
+
+  motorPof.RF = minPof;
+  motorPof.LF = minPof;
+  motorPof.RB = minPof;
+  motorPof.LB = minPof;
+
+  writeToMotors(); 
+}
+
+void calculateAction() {
+  int motorPofValue = map(target.lift, 0, 1024, minPof, maxPof);
+
+  Serial.println(motorPofValue);
+  
+  motorPof.RF = motorPofValue;
+  motorPof.LF = motorPofValue;  
+  motorPof.RB = motorPofValue;  
+  motorPof.LB = motorPofValue;
+  
+ }
 
 void setup() {
     Serial.begin(115200);
@@ -101,6 +192,8 @@ void setup() {
     BP32.enableVirtualDevice(false);
 
     delay(1000);
+
+    motorSetup();
 }
 
 void loop() {
@@ -116,9 +209,11 @@ void loop() {
     
 
     // calculate actions
+    calculateAction();
 
 
     // perform actions
+    writeToMotors();
 
-    delay(150);
+    delay(50);
 }
