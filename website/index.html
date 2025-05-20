@@ -3,7 +3,7 @@
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>PS4 Controller Interface</title>
+        <title>Fernando ATC</title>
         <script src="https://cdn.tailwindcss.com"></script>
         <style>
     .controller-button {
@@ -48,12 +48,10 @@
     <body class="bg-gray-900 text-white min-h-screen p-4">
         <div class="max-w-6xl mx-auto">
             <header class="mb-8">
-                <h1 class="text-3xl font-bold text-center mb-2">PS4 Controller Interface</h1>
-                <p class="text-center text-gray-400">Connect your PS4 controller and see inputs in real-time</p>
+                <h1 class="text-3xl font-bold text-center mb-2">Fernando ATC</h1>
+                <p class="text-center text-gray-400">Connect you Fernando</p>
             </header>
-            <button id="mock-mode" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded">
-                TOGGLE Mock Input
-            </button>
+
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <!-- Controller Visualization -->
                 <div class="bg-gray-800 rounded-lg p-6 shadow-lg">
@@ -66,7 +64,7 @@
                         </div>
                         <div class="ml-4">
                             <div id="connection-status" class="px-3 py-1 rounded-full text-sm font-medium bg-red-500">
-                                Not Connected
+                                Drone Not Connected
                             </div>
                         </div>
                     </div>
@@ -148,11 +146,11 @@
                         </div>
                     </div>
                     <div id="log-container" class="flex-1 bg-gray-900 rounded p-4 font-mono text-sm overflow-y-auto">
-                        <div class="text-gray-500">Waiting for controller input...</div>
+                        <div class="text-gray-500">Waiting for drone logs...</div>
                     </div>
                     <div class="mt-4 flex justify-between">
                         <button id="connect-controller" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded">
-                            Connect Controller
+                            Connect Drone: Fernando
                         </button>
                         <button id="save-log" class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded">
                             Save Log
@@ -281,103 +279,9 @@
       checkForExistingGamepad();
     }
     
-    let mockInputEnabled = false;
-    const mockButton = document.getElementById('mock-mode');
-    mockButton.addEventListener('click', () => {
-        mockInputEnabled = !mockInputEnabled;
-      if (!mockInputEnabled) {
-        stopMockInput();
-      } else {
-        startMockInput();
-      }
-    });
+  
 
     
-    function stopMockInput() {
-      logMessage('Stopping mock input...', 'info');
-      connectionStatus.textContent = 'Not Connected';
-      connectionStatus.classList.remove('bg-purple-500', 'bg-yellow-500');
-      connectionStatus.classList.add('bg-red-500');
-
-      // Stop the interval loop
-      if (statusUpdateInterval) {
-        clearInterval(statusUpdateInterval);
-        statusUpdateInterval = null;
-      }
-
-      // Reset controller state
-      controllerIndex = null;
-      controllers = {};
-    }
-
-function startMockInput() {
-  logMessage('Starting mock input...', 'info');
-  connectionStatus.textContent = 'Mock Connected';
-  connectionStatus.classList.remove('bg-red-500', 'bg-yellow-500');
-  connectionStatus.classList.add('bg-purple-500');
-
-  // Fake controller index
-  controllerIndex = 0;
-  controllers[controllerIndex] = {
-    id: 'Mock PS4 Controller',
-    buttons: Array(18).fill({ pressed: false }),
-    axes: [0, 0, 0, 0],
-  };
-
-  // Start mock update loop at a fixed interval
-  if (!statusUpdateInterval) {
-    statusUpdateInterval = setInterval(mockUpdateStatus, 100); // Update every 100ms
-  }
-}
-
-function mockUpdateStatus() {
-  if (!mockInputEnabled) {
-    logMessage('Mock input disabled', 'info');
-    return;
-  }
-
-  const gamepad = controllers[controllerIndex];
-  if (!gamepad) return;
-
-  // Simulate some buttons being pressed randomly
-  gamepad.buttons = gamepad.buttons.map((button, index) => {
-    const pressed = Math.random() < 0.1;
-    return { pressed };
-  });
-
-  // Simulate analog stick movement
-  gamepad.axes = [
-    (Math.random() * 2 - 1).toFixed(2), // Left X
-    (Math.random() * 2 - 1).toFixed(2), // Left Y
-    (Math.random() * 2 - 1).toFixed(2), // Right X
-    (Math.random() * 2 - 1).toFixed(2), // Right Y
-  ].map(Number);
-
-  // Log differences in button states
-  gamepad.buttons.forEach((button, index) => {
-    const previousButton = previousState.buttons[index] || { pressed: false };
-    if (button.pressed !== previousButton.pressed) {
-      logButtonPress(index, button.pressed);
-    }
-  });
-
-  // Log differences in axes states
-  gamepad.axes.forEach((axis, index) => {
-    const previousAxis = previousState.axes[index] || 0;
-    if (Math.abs(axis - previousAxis) > 0.1) { // Log only significant changes
-      logMessage(`Axis ${index}: ${axis.toFixed(2)}`, 'info');
-    }
-  });
-
-  // Update the previous state
-  previousState.buttons = gamepad.buttons.map(button => ({ ...button }));
-  previousState.axes = [...gamepad.axes];
-
-  sendBLEdata(gamepad);
-
-  // Trigger your existing logic
-  updateStatus();
-}
 
 function logButtonPress(buttonIndex, isPressed) {
   const buttonName = buttonMapping[buttonIndex] || `Button ${buttonIndex}`;
@@ -425,7 +329,7 @@ function logButtonPress(buttonIndex, isPressed) {
       if (gamepad.index === controllerIndex) {
         controllerIndex = null;
         logMessage('Controller disconnected', 'error');
-        connectionStatus.textContent = 'Not Connected';
+        connectionStatus.textContent = 'Drone Not Connected';
         connectionStatus.classList.remove('bg-green-500', 'bg-yellow-500');
         connectionStatus.classList.add('bg-red-500');
         
