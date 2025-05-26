@@ -184,6 +184,7 @@
                 </div>
             </div>
         </div>
+        <script src="../bluetooth.js" type="module"></script>
         <script>
     // Controller state
     let controllers = {};
@@ -259,14 +260,9 @@
     // Initialize
     function init() {
       // Check if GamePad API is supported
-      if (!navigator.getGamepads) {
-        logMessage('GamePad API not supported in this browser', 'error');
-        connectButton.disabled = true;
-        return;
-      }
 
       // Event listeners
-      connectButton.addEventListener('click', connectController);
+      connectButton.addEventListener('click', doBluetooth);
       logToFileToggle.addEventListener('change', toggleFileLogging);
       clearLogButton.addEventListener('click', clearLog);
       saveLogButton.addEventListener('click', saveLogToFile);
@@ -465,7 +461,7 @@ function logButtonPress(buttonIndex, isPressed) {
         try {
           // Request permission to create/write to a file
           fileHandle = await window.showSaveFilePicker({
-            suggestedName: 'controller-log.txt',
+            suggestedName: 'drone-log.txt',
             types: [{
               description: 'Text Files',
               accept: { 'text/plain': ['.txt'] },
@@ -475,7 +471,7 @@ function logButtonPress(buttonIndex, isPressed) {
           logMessage('File logging enabled', 'success');
           
           // Write header to file
-          const header = `=== PS4 CONTROLLER LOG - STARTED ${new Date().toLocaleString()} ===\n\n`;
+          const header = `=== FERNANDO LOG - STARTED ${new Date().toLocaleString()} ===\n\n`;
           await writeToLogFile(header);
           
           // Write existing log data
@@ -518,7 +514,7 @@ function logButtonPress(buttonIndex, isPressed) {
       try {
         const blob = new Blob([logData.join('\n')], { type: 'text/plain' });
         const fileHandle = await window.showSaveFilePicker({
-          suggestedName: 'controller-log.txt',
+          suggestedName: 'drone-log.txt',
           types: [{
             description: 'Text Files',
             accept: { 'text/plain': ['.txt'] },
