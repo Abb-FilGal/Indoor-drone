@@ -4,7 +4,10 @@
 #define MOTORRF 25
 #define MOTORRB 26
 #define MOTORLF 27
-#define MOTORLB 14
+#define MOTORLB 33
+
+#define BUTTON_L1 0x10
+#define BUTTON_R1 0x20
 
 ControllerPtr myController;
 
@@ -13,6 +16,13 @@ const int minPof = 1150;
 const int maxPof = 2000;
 
 const int incrementStep = 5;
+
+struct {
+  uint8_t r=0;
+  uint8_t g=255;
+  uint8_t b=0;
+} color;
+
 
 
 
@@ -78,9 +88,9 @@ void dumpGamepad(ControllerPtr ctl) {
     Serial.printf(
         "idx=%d, dpad: 0x%02x, buttons: 0x%04x, axis L: %4d, %4d, axis R: %4d, %4d, brake: %4d, throttle: %4d, ",
         ctl->index(),        // Controller Index
-        ctl->dpad(),         // D-pad
+       ctl->dpad(),         // D-pad
         ctl->buttons(),      // bitmask of pressed buttons
-        ctl->axisX(),        // (-511 - 512) left X Axis
+       ctl->axisX(),        // (-511 - 512) left X Axis
         ctl->axisY(),        // (-511 - 512) left Y axis
         ctl->axisRX(),       // (-511 - 512) right X axis
         ctl->axisRY(),       // (-511 - 512) right Y axis
@@ -93,9 +103,57 @@ void processGamepad(ControllerPtr ctl) {
   
     // prints controller status
     dumpGamepad(ctl);
+    Serial.println(ctl->battery());
+    
 
+    // Handle lock
+    static bool pressed = false;
+    static bool locked = false;
+    uint32_t buttons = ctl->buttons();
+
+    if(!((buttons & (BUTTON_L1 | BUTTON_R1)) == (BUTTON_L1 | BUTTON_R1))) {
+      pressed = false; 
+      Serial.println("BUTTON NOT PRESSED");
+    }
+
+    if((buttons & (BUTTON_L1 | BUTTON_R1)) == (BUTTON_L1 | BUTTON_R1)) {
+      if(!pressed) {
+        pressed=true;
+        locked = !locked;
+        switch (locked) {
+            case false:
+                // Red
+                color.r=0;
+                color.g=255;
+                color.b=0;
+                break;
+            case true:
+                // Green
+                color.r=255;
+                color.g=0;
+                color.b=0;
+                break;
+        }
+      }
+
+    }
+
+    if(ctl->battery()<20) {
+     Serial.println("Battery low");
+    }
+
+
+    ctl->setColorLED(color.r, color.g, color.b);
+    
+
+    
+
+    
+
+    if(!locked) {
     // updates target values
-    if (target.pitch > ctl->axisY() + incrementStep) {
+
+if (target.pitch > ctl->axisY() + incrementStep) {
       target.pitch -= incrementStep; 
     } else if (target.pitch < ctl-> axisY() - incrementStep) {
       target.pitch += incrementStep;
@@ -116,7 +174,23 @@ void processGamepad(ControllerPtr ctl) {
     } else if (target.lift < ctl->throttle() - ctl->brake() - incrementStep) {
       target.lift += incrementStep;
       }
+
+    if(target.lift>999) {
+       ctl->playDualRumble(0 /* delayedStartMs */, 250 /* durationMs */, 0x80 /* weakMagnitude */,
+                            0x40 /* strongMagnitude */);
+    }
+
+
+    }
+
+    
+    
+
+
+    
 }
+
+
 
 void processControllers() {
         if (myController && myController->isConnected() && myController->hasData()) {
@@ -173,6 +247,7 @@ void calculateAction() {
   motorPof.LB = motorPofValue;
   
  }
+
 
 void setup() {
     Serial.begin(115200);
