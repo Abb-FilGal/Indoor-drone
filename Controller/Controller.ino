@@ -1,6 +1,10 @@
 #include <Bluepad32.h>
 #include <ESP32Servo.h>
 
+#include <Adafruit_MPU6050.h>
+#include <Adafruit_Sensor.h>
+#include <Wire.h>
+
 #define MOTORRF 25
 #define MOTORRB 26
 #define MOTORLF 27
@@ -8,13 +12,36 @@
 
 ControllerPtr myController;
 
+Adafruit_MPU6050 mpu;
 
-const int minPof = 1150;
-const int maxPof = 2000;
+float prevPitchError = 0;
+float prevRollError = 0;
+float prevYawError = 0;
 
-const int incrementStep = 5;
+const float rollP = 0.6;
+const float pitchP = 0.6;
+const float yawP = 2.0;
 
+const float rollI = 3.5;
+const float pitchI = 3.5;
+const float yawI = 12.0;
 
+const float rollD = 0.03;
+const float pitchD = 0.03;
+const float yawD = 0.;
+
+float gx,gy,gz;
+
+float prevIPitchError = 0;
+float prevIRollError = 0;
+float prevIYawError = 0;
+
+const float ts = 0.004;
+
+const float minPof = 1000;
+const float maxPof = 2000;
+
+const int incrementStep = 1;
 
 struct {
   Servo RF;
@@ -38,14 +65,14 @@ struct {
   } current;
 
  struct {
-  int RF;
-  int LF;
-  int RB;
-  int LB;
+  float RF = 0.25;
+  float LF = 0.25;
+  float RB = 0.25;
+  float LB = 0.25;
  } motorPof;
 
+ sensors_event_t a, g, temp;
 
- 
 // This callback gets called any time a new gamepad is connected.
 void onConnectedController(ControllerPtr ctl) {
         if (myController == nullptr) {
@@ -95,25 +122,25 @@ void processGamepad(ControllerPtr ctl) {
     dumpGamepad(ctl);
 
     // updates target values
-    if (target.pitch > ctl->axisY() + incrementStep) {
+    if (target.pitch >= ctl->axisY() + incrementStep) {
       target.pitch -= incrementStep; 
-    } else if (target.pitch < ctl-> axisY() - incrementStep) {
+    } else if (target.pitch <= ctl-> axisY() - incrementStep) {
       target.pitch += incrementStep;
       }
 
-    if (target.roll > ctl->axisX() + incrementStep) {
+    if (target.roll >= ctl->axisX() + incrementStep) {
       target.roll -= incrementStep;
-    } else if (target.roll < ctl->axisX() - incrementStep) {
+    } else if (target.roll <= ctl->axisX() - incrementStep) {
       target.roll += incrementStep;
       }
-      if (target.yaw > ctl->axisRX() + incrementStep) {
+      if (target.yaw >= ctl->axisRX() + incrementStep) {
       target.yaw -= incrementStep;
-    } else if (target.yaw < ctl->axisRX() - incrementStep) {
+    } else if (target.yaw <= ctl->axisRX() - incrementStep) {
       target.yaw += incrementStep;
       }
-      if (target.lift > ctl->throttle()-ctl->brake() + incrementStep) {
+      if (target.lift >= ctl->throttle()-ctl->brake() + incrementStep) {
       target.lift -= incrementStep;
-    } else if (target.lift < ctl->throttle() - ctl->brake() - incrementStep) {
+    } else if (target.lift <= ctl->throttle() - ctl->brake() - incrementStep) {
       target.lift += incrementStep;
       }
 }
@@ -129,10 +156,12 @@ void processControllers() {
 }
 
 void writeToMotors(){
-  motor.RF.writeMicroseconds(motorPof.RF);
-  motor.LF.writeMicroseconds(motorPof.LF);
-  motor.RB.writeMicroseconds(motorPof.RB);
-  motor.LB.writeMicroseconds(motorPof.LB);
+  int motorThrottle = map(target.lift, 0, 1024, 1000, 12);
+  
+  motor.RF.writeMicroseconds(motorPof.RF + motorThrottle);
+  motor.LF.writeMicroseconds(motorPof.LF * motorThrottle);
+  motor.RB.writeMicroseconds(motorPof.RB * motorThrottle);
+  motor.LB.writeMicroseconds(motorPof.LB * motorThrottle);
 }
 
 void motorSetup() {
@@ -141,10 +170,10 @@ void motorSetup() {
   motor.RB.attach(MOTORRB);
   motor.LB.attach(MOTORLB);
 
-  motorPof.RF = 1000;
-  motorPof.LF = 1000;
-  motorPof.RB = 1000;
-  motorPof.LB = 1000;
+  motorPof.RF = 0;
+  motorPof.LF = 0;
+  motorPof.RB = 0;
+  motorPof.LB = 0;
 
   writeToMotors();
 
@@ -154,24 +183,73 @@ void motorSetup() {
 
   delay(1000);  // Wait for arming sequence
 
-  motorPof.RF = minPof;
-  motorPof.LF = minPof;
-  motorPof.RB = minPof;
-  motorPof.LB = minPof;
+  motorPof.RF = 0;
+  motorPof.LF = 0;
+  motorPof.RB = 0;
+  motorPof.LB = 0;
 
   writeToMotors(); 
 }
 
 void calculateAction() {
-  int motorPofValue = map(target.lift, 0, 1024, minPof, maxPof);
+  int motor = map(target.lift, 0, 1024, 1000, 2000);
 
-  Serial.println(motorPofValue);
+  float desiredRoll = map(target.roll, -512, 512, -1, 1);
+  float desiredPitch = map(target.pitch, -512, 512, -1, 1);
+  float desiredYaw = map(target.yaw, -512, 512, -1, 1);
+
+  float errorRoll = (desiredRoll - gx);
+  float errorPitch = (desiredPitch - gy);
+  float errorYaw = (desiredYaw - gz);
+
   
-  motorPof.RF = motorPofValue;
-  motorPof.LF = motorPofValue;  
-  motorPof.RB = motorPofValue;  
-  motorPof.LB = motorPofValue;
+  prevIRollError += rollI*(errorRoll+prevRollError)* ts /2;
+  float Droll = rollD*(errorRoll-prevRollError)/ts;
+  prevRollError = errorRoll;
   
+  prevIPitchError += pitchI*(errorPitch+prevPitchError)* ts /2;
+  float Dpitch = pitchD*(errorPitch-prevPitchError)/ts;
+  prevPitchError = errorPitch;
+
+  prevIYawError += yawI*(errorYaw+prevYawError)* ts /2;
+  float Dyaw = yawD*(errorYaw-prevYawError)/ts;
+  prevYawError = errorYaw;
+
+  float InputRoll = rollP*errorRoll+prevIRollError+Droll;  
+  float InputPitch = pitchP*errorPitch+prevIPitchError+Dpitch;
+  float InputYaw = yawP*errorYaw+prevIYawError+Dyaw;
+
+  motorPof.RB -= InputRoll;
+  motorPof.LB += InputRoll;
+  motorPof.RF -= InputRoll;
+  motorPof.LF += InputRoll;
+
+  motorPof.RB += InputPitch;
+  motorPof.LB += InputPitch;
+  motorPof.RF -= InputPitch;
+  motorPof.LF -= InputPitch;
+
+  motorPof.RB += InputYaw;
+  motorPof.LB -= InputYaw;
+  motorPof.RF -= InputYaw;
+  motorPof.LF += InputYaw;
+ }
+
+ void getSensorValues() {
+  mpu.getEvent(&a, &g, &temp);
+  gx = g.gyro.x;
+  gy = g.gyro.y;
+  gz = g.gyro.z;
+
+  Serial.print("Rotation X: ");
+  Serial.print(gx);
+  Serial.print(", Y: ");
+  Serial.print(gy);
+  Serial.print(", Z: ");
+  Serial.print(gz);
+  Serial.println(" rad/s");
+  Serial.println("");
+
  }
 
 void setup() {
@@ -180,7 +258,76 @@ void setup() {
     const uint8_t* addr = BP32.localBdAddress();
     Serial.printf("BD Addr: %2X:%2X:%2X:%2X:%2X:%2X\n", addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]);
 
-    
+    if (!mpu.begin()){
+      Serial.println("Adafruit MPU6050 test!");
+      while (1) {
+        delay(10);
+      }
+    }
+
+    Serial.println("MPU6050 Found!");
+
+    mpu.setAccelerometerRange(MPU6050_RANGE_16_G);
+    Serial.print("Accelerometer range set to: ");
+  switch (mpu.getAccelerometerRange()) {
+  case MPU6050_RANGE_2_G:
+    Serial.println("+-2G");
+    break;
+  case MPU6050_RANGE_4_G:
+    Serial.println("+-4G");
+    break;
+  case MPU6050_RANGE_8_G:
+    Serial.println("+-8G");
+    break;
+  case MPU6050_RANGE_16_G:
+    Serial.println("+-16G");
+    break;
+  }
+  mpu.setGyroRange(MPU6050_RANGE_500_DEG);
+  Serial.print("Gyro range set to: ");
+  switch (mpu.getGyroRange()) {
+  case MPU6050_RANGE_250_DEG:
+    Serial.println("+- 250 deg/s");
+    break;
+  case MPU6050_RANGE_500_DEG:
+    Serial.println("+- 500 deg/s");
+    break;
+  case MPU6050_RANGE_1000_DEG:
+    Serial.println("+- 1000 deg/s");
+    break;
+  case MPU6050_RANGE_2000_DEG:
+    Serial.println("+- 2000 deg/s");
+    break;
+  }
+
+  mpu.setFilterBandwidth(MPU6050_BAND_5_HZ);
+  Serial.print("Filter bandwidth set to: ");
+  switch (mpu.getFilterBandwidth()) {
+  case MPU6050_BAND_260_HZ:
+    Serial.println("260 Hz");
+    break;
+  case MPU6050_BAND_184_HZ:
+    Serial.println("184 Hz");
+    break;
+  case MPU6050_BAND_94_HZ:
+    Serial.println("94 Hz");
+    break;
+  case MPU6050_BAND_44_HZ:
+    Serial.println("44 Hz");
+    break;
+  case MPU6050_BAND_21_HZ:
+    Serial.println("21 Hz");
+    break;
+  case MPU6050_BAND_10_HZ:
+    Serial.println("10 Hz");
+    break;
+  case MPU6050_BAND_5_HZ:
+    Serial.println("5 Hz");
+    break;
+  }
+
+  Serial.println("");
+  delay(100);
 
     // Setup the Bluepad32 callbacks
     BP32.setup(&onConnectedController, &onDisconnectedController);
@@ -205,6 +352,7 @@ void loop() {
 
 
     // Update current drone status
+    getSensorValues();
 
     
 
@@ -215,5 +363,5 @@ void loop() {
     // perform actions
     writeToMotors();
 
-    delay(50);
+    delay(4);
 }
