@@ -1,5 +1,6 @@
 #include <Bluepad32.h>
 #include <ESP32Servo.h>
+#include <Arduino.h>
 
 #include <Adafruit_MPU6050.h>
 #include <Adafruit_Sensor.h>
@@ -10,9 +11,6 @@
 #define MOTORLF 27
 #define MOTORLB 33
 
-#define BUTTON_L1 0x10
-#define BUTTON_R1 0x20
-
 ControllerPtr myController;
 
 Adafruit_MPU6050 mpu;
@@ -21,17 +19,17 @@ float prevPitchError = 0;
 float prevRollError = 0;
 float prevYawError = 0;
 
-const float rollP = 0.6;
-const float pitchP = 0.6;
-const float yawP = 2.0;
+const float rollP = 10;
+const float pitchP = 10;
+const float yawP = 20.0;
 
-const float rollI = 3.5;
-const float pitchI = 3.5;
-const float yawI = 12.0;
+const float rollI = 60.;
+const float pitchI = 60.;
+const float yawI = 80.;
 
-const float rollD = 0.03;
-const float pitchD = 0.03;
-const float yawD = 0.;
+const float rollD = 0.75;
+const float pitchD = 0.75;
+const float yawD = 0.0;
 
 float gx,gy,gz;
 
@@ -39,28 +37,12 @@ float prevIPitchError = 0;
 float prevIRollError = 0;
 float prevIYawError = 0;
 
-struct {
-  uint8_t r=0;
-  uint8_t g=255;
-  uint8_t b=0;
-} color;
-
-
 const float ts = 0.004;
 
 const float minPof = 1000;
 const float maxPof = 2000;
 
 const int incrementStep = 1;
-
-struct {
-  uint8_t r=0;
-  uint8_t g=255;
-  uint8_t b=0;
-} color;
-
-
-
 
 struct {
   Servo RF;
@@ -84,10 +66,10 @@ struct {
   } current;
 
  struct {
-  float RF = 0.25;
-  float LF = 0.25;
-  float RB = 0.25;
-  float LB = 0.25;
+  float RF = 0;
+  float LF = 0;
+  float RB = 0;
+  float LB = 0;
  } motorPof;
 
  sensors_event_t a, g, temp;
@@ -124,9 +106,9 @@ void dumpGamepad(ControllerPtr ctl) {
     Serial.printf(
         "idx=%d, dpad: 0x%02x, buttons: 0x%04x, axis L: %4d, %4d, axis R: %4d, %4d, brake: %4d, throttle: %4d, ",
         ctl->index(),        // Controller Index
-       ctl->dpad(),         // D-pad
+        ctl->dpad(),         // D-pad
         ctl->buttons(),      // bitmask of pressed buttons
-       ctl->axisX(),        // (-511 - 512) left X Axis
+        ctl->axisX(),        // (-511 - 512) left X Axis
         ctl->axisY(),        // (-511 - 512) left Y axis
         ctl->axisRX(),       // (-511 - 512) right X axis
         ctl->axisRY(),       // (-511 - 512) right Y axis
@@ -139,95 +121,37 @@ void processGamepad(ControllerPtr ctl) {
   
     // prints controller status
     dumpGamepad(ctl);
-    Serial.println(ctl->battery());
-    
 
-    // Handle lock
-    static bool pressed = false;
-    static bool locked = false;
-    uint32_t buttons = ctl->buttons();
-
-    if(!((buttons & (BUTTON_L1 | BUTTON_R1)) == (BUTTON_L1 | BUTTON_R1))) {
-      pressed = false; 
-      Serial.println("BUTTON NOT PRESSED");
-    }
-
-    if((buttons & (BUTTON_L1 | BUTTON_R1)) == (BUTTON_L1 | BUTTON_R1)) {
-      if(!pressed) {
-        pressed=true;
-        locked = !locked;
-        switch (locked) {
-            case false:
-                // Red
-                color.r=0;
-                color.g=255;
-                color.b=0;
-                break;
-            case true:
-                // Green
-                color.r=255;
-                color.g=0;
-                color.b=0;
-                break;
-        }
-      }
-
-    }
-
-    if(ctl->battery()<20) {
-     Serial.println("Battery low");
-    }
-
-
-    ctl->setColorLED(color.r, color.g, color.b);
-    
-
-    
-
-    
-
-    if(!locked) {
     // updates target values
+     target.pitch = ctl->axisY(); 
+     target.roll = ctl-> axisX();
+     target.yaw = ctl->axisRX();
 
-    if (target.pitch >= ctl->axisY() + incrementStep) {
+     // "slow" going down
+     if (ctl->throttle() >= target.lift) {
+      target.lift = ctl->throttle(); 
+     } else if (target.lift -50 >= ctl->throttle()) {
+      target.lift -= 50;
+     }
+     else if (target.lift -10 >= ctl->throttle()) {
+      target.lift -= 10;
+     }
+     
 
-      target.pitch -= incrementStep; 
-    } else if (target.pitch <= ctl-> axisY() - incrementStep) {
-      target.pitch += incrementStep;
+    // deadzone
+     if ((target.pitch > -10) && (target.pitch < 10)){
+        target.pitch = 0;
       }
-
-    if (target.roll >= ctl->axisX() + incrementStep) {
-      target.roll -= incrementStep;
-    } else if (target.roll <= ctl->axisX() - incrementStep) {
-      target.roll += incrementStep;
+     if ((target.yaw > -10) && (target.yaw < 10)){
+        target.yaw = 0;
       }
-      if (target.yaw >= ctl->axisRX() + incrementStep) {
-      target.yaw -= incrementStep;
-    } else if (target.yaw <= ctl->axisRX() - incrementStep) {
-      target.yaw += incrementStep;
+     if ((target.roll > -10) && (target.roll < 10)){
+        target.roll = 0;
       }
-      if (target.lift >= ctl->throttle()-ctl->brake() + incrementStep) {
-      target.lift -= incrementStep;
-    } else if (target.lift <= ctl->throttle() - ctl->brake() - incrementStep) {
-      target.lift += incrementStep;
+     if (target.lift < 20){
+        target.lift = 0;
       }
-
-    if(target.lift>999) {
-       ctl->playDualRumble(0 /* delayedStartMs */, 250 /* durationMs */, 0x80 /* weakMagnitude */,
-                            0x40 /* strongMagnitude */);
-    }
-
-
-    }
-
-    
-    
-
-
-    
 }
-
-
 
 void processControllers() {
         if (myController && myController->isConnected() && myController->hasData()) {
@@ -240,12 +164,40 @@ void processControllers() {
 }
 
 void writeToMotors(){
-  int motorThrottle = map(target.lift, 0, 1024, 1000, 12);
   
-  motor.RF.writeMicroseconds(motorPof.RF + motorThrottle);
-  motor.LF.writeMicroseconds(motorPof.LF * motorThrottle);
-  motor.RB.writeMicroseconds(motorPof.RB * motorThrottle);
-  motor.LB.writeMicroseconds(motorPof.LB * motorThrottle);
+  int motorThrottle; 
+  if (target.lift == 0) {
+    motorThrottle = 0;
+
+    motor.RF.writeMicroseconds(1000);
+    motor.LF.writeMicroseconds(1000);
+    motor.RB.writeMicroseconds(1000);
+    motor.LB.writeMicroseconds(1000);
+
+    prevIPitchError = 0;
+    prevIRollError = 0;
+    prevIYawError = 0;
+    
+  } else {
+    motorThrottle = map(target.lift, 20, 1024, 1200, 2000);
+  
+  Serial.print("Throttle Power: ");
+  Serial.println(motorThrottle);
+  Serial.print("Motor RF: ");
+  Serial.println(motorPof.RF);
+  Serial.print("Motor LF: ");
+  Serial.println(motorPof.LF);
+  Serial.print("Motor RB: ");
+  Serial.println(motorPof.RB);
+  Serial.print("Motor LB: ");
+  Serial.println(motorPof.LB);
+ 
+  motor.RF.writeMicroseconds(max(min(int(motorPof.RF + motorThrottle), 2000),1000));
+  motor.LF.writeMicroseconds(max(min(int(motorPof.LF + motorThrottle), 2000),1000));
+  motor.RB.writeMicroseconds(max(min(int(motorPof.RB + motorThrottle), 2000),1000));
+  motor.LB.writeMicroseconds(max(min(int(motorPof.LB + motorThrottle), 2000),1000));
+
+  }
 }
 
 void motorSetup() {
@@ -253,37 +205,16 @@ void motorSetup() {
   motor.LF.attach(MOTORLF);
   motor.RB.attach(MOTORRB);
   motor.LB.attach(MOTORLB);
-
-  motorPof.RF = 0;
-  motorPof.LF = 0;
-  motorPof.RB = 0;
-  motorPof.LB = 0;
-
-  writeToMotors();
-
-  delay(2000);  // Wait for arming sequence
-
-  writeToMotors();
-
-  delay(1000);  // Wait for arming sequence
-
-  motorPof.RF = 0;
-  motorPof.LF = 0;
-  motorPof.RB = 0;
-  motorPof.LB = 0;
-
-  writeToMotors(); 
 }
 
 void calculateAction() {
-  int motor = map(target.lift, 0, 1024, 1000, 2000);
 
-  float desiredRoll = map(target.roll, -512, 512, -1, 1);
-  float desiredPitch = map(target.pitch, -512, 512, -1, 1);
-  float desiredYaw = map(target.yaw, -512, 512, -1, 1);
+  float desiredRoll = map(target.roll, -512, 512, -2, 2);
+  float desiredPitch = map(target.pitch, -512, 512, 2, -2);
+  float desiredYaw = map(target.yaw, -512, 512, -4, 4);
 
-  float errorRoll = (desiredRoll - gx);
-  float errorPitch = (desiredPitch - gy);
+  float errorRoll = (desiredRoll - gy);
+  float errorPitch = (desiredPitch - gx);
   float errorYaw = (desiredYaw - gz);
 
   
@@ -303,6 +234,11 @@ void calculateAction() {
   float InputPitch = pitchP*errorPitch+prevIPitchError+Dpitch;
   float InputYaw = yawP*errorYaw+prevIYawError+Dyaw;
 
+  motorPof.RB = 0;
+  motorPof.LB = 0;
+  motorPof.RF = 0;
+  motorPof.LF = 0;
+
   motorPof.RB -= InputRoll;
   motorPof.LB += InputRoll;
   motorPof.RF -= InputRoll;
@@ -321,8 +257,8 @@ void calculateAction() {
 
  void getSensorValues() {
   mpu.getEvent(&a, &g, &temp);
-  gx = g.gyro.x;
-  gy = g.gyro.y;
+  gx = -g.gyro.x;
+  gy = -g.gyro.y;
   gz = g.gyro.z;
 
   Serial.print("Rotation X: ");
@@ -336,6 +272,10 @@ void calculateAction() {
 
  }
 
+void ledcWriteMicroseconds(uint8_t channel, uint16_t microseconds) {
+  uint32_t duty = (microseconds * ((1 << 16) - 1)) / 20000; // 20 ms period
+  ledcWrite(channel, duty);
+}
 
 void setup() {
     Serial.begin(115200);
@@ -349,6 +289,36 @@ void setup() {
         delay(10);
       }
     }
+
+    ledcSetup(0, 50, 16);
+    ledcSetup(1, 50, 16);
+    ledcSetup(2, 50, 16);
+    ledcSetup(3, 50, 16);
+
+    ledcAttachPin(MOTORRF, 0);
+    ledcAttachPin(MOTORRB, 1);
+    ledcAttachPin(MOTORLF, 2);
+    ledcAttachPin(MOTORLB, 3);
+
+    ledcWriteMicroseconds(0, 2000);
+    ledcWriteMicroseconds(1, 2000);
+    ledcWriteMicroseconds(2, 2000);
+    ledcWriteMicroseconds(3, 2000);
+
+    Serial.println(">>> CONNECT BATTERY NOW <<<");
+    delay(5000);  // Wait for ESCs to register max throttle (beeping)
+
+    ledcWriteMicroseconds(0, 1000);
+    ledcWriteMicroseconds(1, 1000);
+    ledcWriteMicroseconds(2, 1000);
+    ledcWriteMicroseconds(3, 1000);
+
+    Serial.println("ESCs should beep and arm now.");
+    delay(3000);  // Allow ESCs to finish calibration
+
+    Serial.println("calibration done");
+
+    
 
     Serial.println("MPU6050 Found!");
 
