@@ -53,14 +53,6 @@ const float maxPof = 2000;
 
 const int incrementStep = 1;
 
-struct {
-  uint8_t r=0;
-  uint8_t g=255;
-  uint8_t b=0;
-} color;
-
-
-
 
 struct {
   Servo RF;
