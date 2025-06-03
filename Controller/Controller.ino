@@ -133,6 +133,7 @@ void dumpGamepad(ControllerPtr ctl) {
      //   ctl->brake(),        // (0 - 1023): brake button
        // ctl->throttle()      // (0 - 1023): throttle (AKA gas) button
    // );
+
 }
 
 void processGamepad(ControllerPtr ctl) {
@@ -175,7 +176,7 @@ void processGamepad(ControllerPtr ctl) {
   
   
       // Serial.println(ctl->battery());
-  
+
       ctl->setColorLED(color.r, color.g, color.b);
 
 
@@ -226,7 +227,6 @@ if (target.lift < 20){
 
   rollInt = 0.;
   pitchInt = 0.;
-  
 }
     } else {
       ctl->setColorLED(255, 0, 128);
