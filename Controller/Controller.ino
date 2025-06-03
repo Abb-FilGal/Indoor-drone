@@ -11,9 +11,6 @@
 #define MOTORLF 27
 #define MOTORLB 33
 
-#define BUTTON_L1 0x10
-#define BUTTON_R1 0x20
-
 ControllerPtr myController;
 
 Adafruit_MPU6050 mpu;
@@ -26,19 +23,25 @@ const float rollP = 10;
 const float pitchP = 10;
 const float yawP = 20.0;
 
-const float rollI = 60.;
-const float pitchI = 60.;
-const float yawI = 80.;
+float rollInt = 0.;
+float pitchInt = 0.;
 
-const float rollD = 0.75;
-const float pitchD = 0.75;
+const float rollI = 0.; //50.
+const float pitchI = 0.; //50.
+const float yawI = 0.;// 80.
+
+const float rollD = 0.; //0.5
+const float pitchD = 0.; //0.5
 const float yawD = 0.0;
 
 float gx,gy,gz;
+float ax,ay,az;
 
 float prevIPitchError = 0;
 float prevIRollError = 0;
 float prevIYawError = 0;
+
+const float gain = 0.8;
 
 const float ts = 0.004;
 
@@ -46,13 +49,6 @@ const float minPof = 1000;
 const float maxPof = 2000;
 
 const int incrementStep = 1;
-
-
-struct {
-  uint8_t r=255;
-  uint8_t g=0;
-  uint8_t b=0;
-} color;
 
 struct {
   Servo RF;
@@ -87,44 +83,44 @@ struct {
 // This callback gets called any time a new gamepad is connected.
 void onConnectedController(ControllerPtr ctl) {
         if (myController == nullptr) {
-            Serial.printf("CALLBACK: Controller is connected, index=%d\n");
+            //Serial.printf("CALLBACK: Controller is connected, index=%d\n");
             // Additionally, you can get certain gamepad properties like:
             // Model, VID, PID, BTAddr, flags, etc.
             ControllerProperties properties = ctl->getProperties();
-            Serial.printf("Controller model: %s, VID=0x%04x, PID=0x%04x\n", ctl->getModelName().c_str(), properties.vendor_id,
-                           properties.product_id);
+            //Serial.printf("Controller model: %s, VID=0x%04x, PID=0x%04x\n", ctl->getModelName().c_str(), properties.vendor_id,
+            //               properties.product_id);
             myController = ctl;
     }
     else {
-        Serial.println("CALLBACK: Controller connected, but could not found empty slot");
+        //Serial.println("CALLBACK: Controller connected, but could not found empty slot");
     }
 }
 
 void onDisconnectedController(ControllerPtr ctl) {
 
         if (myController == ctl) {
-            Serial.printf("CALLBACK: Controller disconnected from index=%d\n");
+            //Serial.printf("CALLBACK: Controller disconnected from index=%d\n");
             myController = nullptr;
     }
 
     else {
-        Serial.println("CALLBACK: Controller disconnected, but not found in myControllers");
+        //Serial.println("CALLBACK: Controller disconnected, but not found in myControllers");
     }
 }
 
 void dumpGamepad(ControllerPtr ctl) {
-    Serial.printf(
-        "idx=%d, dpad: 0x%02x, buttons: 0x%04x, axis L: %4d, %4d, axis R: %4d, %4d, brake: %4d, throttle: %4d, ",
-        ctl->index(),        // Controller Index
-        ctl->dpad(),         // D-pad
-        ctl->buttons(),      // bitmask of pressed buttons
-        ctl->axisX(),        // (-511 - 512) left X Axis
-        ctl->axisY(),        // (-511 - 512) left Y axis
-        ctl->axisRX(),       // (-511 - 512) right X axis
-        ctl->axisRY(),       // (-511 - 512) right Y axis
-        ctl->brake(),        // (0 - 1023): brake button
-        ctl->throttle()      // (0 - 1023): throttle (AKA gas) button
-    );
+    //Serial.printf(
+    //    "idx=%d, dpad: 0x%02x, buttons: 0x%04x, axis L: %4d, %4d, axis R: %4d, %4d, brake: %4d, throttle: %4d, ",
+    //    ctl->index(),        // Controller Index
+    //    ctl->dpad(),         // D-pad
+    //    ctl->buttons(),      // bitmask of pressed buttons
+    //    ctl->axisX(),        // (-511 - 512) left X Axis
+    //    ctl->axisY(),        // (-511 - 512) left Y axis
+    //    ctl->axisRX(),       // (-511 - 512) right X axis
+    //    ctl->axisRY(),       // (-511 - 512) right Y axis
+     //   ctl->brake(),        // (0 - 1023): brake button
+       // ctl->throttle()      // (0 - 1023): throttle (AKA gas) button
+   // );
 }
 
 void processGamepad(ControllerPtr ctl) {
@@ -132,79 +128,43 @@ void processGamepad(ControllerPtr ctl) {
     // prints controller status
     dumpGamepad(ctl);
 
-    Serial.println(ctl->battery());
+    // updates target values
+     target.pitch = ctl->axisY(); 
+     target.roll = ctl-> axisX();
+     target.yaw = ctl->axisRX();
 
-       // Handle lock
-       static bool pressed = false;
-       static bool locked = true;
-       uint32_t buttons = ctl->buttons();
+     // "slow" going down
+     if (ctl->throttle() >= target.lift) {
+      target.lift = ctl->throttle(); 
+     } else if (target.lift -50 >= ctl->throttle()) {
+      target.lift -= 50;
+     }
+     else if (target.lift -10 >= ctl->throttle()) {
+      target.lift -= 10;
+     }
 
-       if(!((buttons & (BUTTON_L1 | BUTTON_R1)) == (BUTTON_L1 | BUTTON_R1))) {
-        pressed = false; 
+     if (ctl->b() && ctl->y()) {    
+      prevIPitchError = 0;
+      prevIRollError = 0;
+      prevIYawError = 0;
+
+      rollInt = 0.;
+      pitchInt = 0.;
+     }
+
+    // deadzone
+     if ((target.pitch > -10) && (target.pitch < 10)){
+        target.pitch = 0;
       }
-  
-      if((buttons & (BUTTON_L1 | BUTTON_R1)) == (BUTTON_L1 | BUTTON_R1)) {
-        if(!pressed && target.lift == 0) {
-          pressed=true;
-          locked = !locked;
-          switch (locked) {
-              case false:
-                  // Red
-                  color.r=0;
-                  color.g=255;
-                  color.b=0;
-                  break;
-              case true:
-                  // Green
-                  color.r=255;
-                  color.g=0;
-                  color.b=0;
-                  break;
-          }
-        }
-  
+     if ((target.yaw > -10) && (target.yaw < 10)){
+        target.yaw = 0;
       }
-  
-      if(ctl->battery()<20) {
-       Serial.println("Battery low");
+     if ((target.roll > -10) && (target.roll < 10)){
+        target.roll = 0;
       }
-  
-      ctl->setColorLED(color.r, color.g, color.b);
-
-
-      // Lock the controller
-    if(!locked) {
-// updates target values
-target.pitch = ctl->axisY(); 
-target.roll = ctl-> axisX();
-target.yaw = ctl->axisRX();
-
-// "slow" going down
-if (ctl->throttle() >= target.lift) {
- target.lift = ctl->throttle(); 
-} else if (target.lift -50 >= ctl->throttle()) {
- target.lift -= 50;
-}
-else if (target.lift -10 >= ctl->throttle()) {
- target.lift -= 10;
-}
-
-
-// deadzone
-if ((target.pitch > -10) && (target.pitch < 10)){
-   target.pitch = 0;
- }
-if ((target.yaw > -10) && (target.yaw < 10)){
-   target.yaw = 0;
- }
-if ((target.roll > -10) && (target.roll < 10)){
-   target.roll = 0;
- }
-if (target.lift < 20){
-   target.lift = 0;
- }
-    }      
-    
+     if (target.lift < 20){
+        target.lift = 0;
+      }
 }
 
 void processControllers() {
@@ -212,7 +172,7 @@ void processControllers() {
             if (myController->isGamepad()) {
                 processGamepad(myController);
             } else {
-                Serial.println("Unsupported controller");
+                //Serial.println("Unsupported controller");
             }
         }
 }
@@ -235,16 +195,16 @@ void writeToMotors(){
   } else {
     motorThrottle = map(target.lift, 20, 1024, 1200, 2000);
   
-  Serial.print("Throttle Power: ");
-  Serial.println(motorThrottle);
-  Serial.print("Motor RF: ");
-  Serial.println(motorPof.RF);
-  Serial.print("Motor LF: ");
-  Serial.println(motorPof.LF);
-  Serial.print("Motor RB: ");
-  Serial.println(motorPof.RB);
-  Serial.print("Motor LB: ");
-  Serial.println(motorPof.LB);
+  //Serial.print("Throttle Power: ");
+  //Serial.println(motorThrottle);
+  //Serial.print("Motor RF: ");
+  //Serial.println(motorPof.RF);
+  //Serial.print("Motor LF: ");
+  //Serial.println(motorPof.LF);
+  //Serial.print("Motor RB: ");
+  //Serial.println(motorPof.RB);
+  //Serial.print("Motor LB: ");
+  //Serial.println(motorPof.LB);
  
   motor.RF.writeMicroseconds(max(min(int(motorPof.RF + motorThrottle), 2000),1000));
   motor.LF.writeMicroseconds(max(min(int(motorPof.LF + motorThrottle), 2000),1000));
@@ -267,8 +227,27 @@ void calculateAction() {
   float desiredPitch = map(target.pitch, -512, 512, 2, -2);
   float desiredYaw = map(target.yaw, -512, 512, -4, 4);
 
-  float errorRoll = (desiredRoll - gy);
-  float errorPitch = (desiredPitch - gx);
+  rollInt += gy * ts;
+  pitchInt += gx * ts;
+
+  float accelerometerRoll = -atan(ax/az);
+  float accelerometerPitch = atan(ay/az);
+  
+  float currentRollAngle = gain*rollInt + (1.-gain)*accelerometerRoll;
+  float currentPitchAngle = gain*pitchInt + (1.-gain)*accelerometerPitch;
+
+
+  // prints for testing angle calculation
+  Serial.print("RollAngle:");
+  Serial.print(currentRollAngle);
+  Serial.print(",");
+  Serial.print("PitchAngle:");
+  Serial.println(currentPitchAngle);
+  
+
+  float errorRoll = (desiredRoll - currentRollAngle);
+  float errorPitch = (desiredPitch - currentPitchAngle);
+  
   float errorYaw = (desiredYaw - gz);
 
   
@@ -315,14 +294,18 @@ void calculateAction() {
   gy = -g.gyro.y;
   gz = g.gyro.z;
 
-  Serial.print("Rotation X: ");
-  Serial.print(gx);
-  Serial.print(", Y: ");
-  Serial.print(gy);
-  Serial.print(", Z: ");
-  Serial.print(gz);
-  Serial.println(" rad/s");
-  Serial.println("");
+  ax = a.acceleration.x;
+  ay = a.acceleration.y;
+  az = -a.acceleration.z;
+
+  //Serial.print("Rotation X: ");
+  //Serial.print(gx);
+  //Serial.print(", Y: ");
+  //Serial.print(gy);
+  //Serial.print(", Z: ");
+  //Serial.print(gz);
+  //Serial.println(" rad/s");
+  //Serial.println("");
 
  }
 
@@ -333,12 +316,12 @@ void ledcWriteMicroseconds(uint8_t channel, uint16_t microseconds) {
 
 void setup() {
     Serial.begin(115200);
-    Serial.printf("Firmware: %s\n", BP32.firmwareVersion());
+    //Serial.printf("Firmware: %s\n", BP32.firmwareVersion());
     const uint8_t* addr = BP32.localBdAddress();
-    Serial.printf("BD Addr: %2X:%2X:%2X:%2X:%2X:%2X\n", addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]);
+    //Serial.printf("BD Addr: %2X:%2X:%2X:%2X:%2X:%2X\n", addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]);
 
     if (!mpu.begin()){
-      Serial.println("Adafruit MPU6050 test!");
+      //Serial.println("Adafruit MPU6050 test!");
       while (1) {
         delay(10);
       }
@@ -359,7 +342,7 @@ void setup() {
     ledcWriteMicroseconds(2, 2000);
     ledcWriteMicroseconds(3, 2000);
 
-    Serial.println(">>> CONNECT BATTERY NOW <<<");
+    //Serial.println(">>> CONNECT BATTERY NOW <<<");
     delay(5000);  // Wait for ESCs to register max throttle (beeping)
 
     ledcWriteMicroseconds(0, 1000);
@@ -367,75 +350,75 @@ void setup() {
     ledcWriteMicroseconds(2, 1000);
     ledcWriteMicroseconds(3, 1000);
 
-    Serial.println("ESCs should beep and arm now.");
+    //Serial.println("ESCs should beep and arm now.");
     delay(3000);  // Allow ESCs to finish calibration
 
-    Serial.println("calibration done");
+    //Serial.println("calibration done");
 
     
 
-    Serial.println("MPU6050 Found!");
+    //Serial.println("MPU6050 Found!");
 
     mpu.setAccelerometerRange(MPU6050_RANGE_16_G);
-    Serial.print("Accelerometer range set to: ");
+    //Serial.print("Accelerometer range set to: ");
   switch (mpu.getAccelerometerRange()) {
   case MPU6050_RANGE_2_G:
-    Serial.println("+-2G");
+    //Serial.println("+-2G");
     break;
   case MPU6050_RANGE_4_G:
-    Serial.println("+-4G");
+    //Serial.println("+-4G");
     break;
   case MPU6050_RANGE_8_G:
-    Serial.println("+-8G");
+    //Serial.println("+-8G");
     break;
   case MPU6050_RANGE_16_G:
-    Serial.println("+-16G");
+    //Serial.println("+-16G");
     break;
   }
   mpu.setGyroRange(MPU6050_RANGE_500_DEG);
-  Serial.print("Gyro range set to: ");
+  //Serial.print("Gyro range set to: ");
   switch (mpu.getGyroRange()) {
   case MPU6050_RANGE_250_DEG:
-    Serial.println("+- 250 deg/s");
+    //Serial.println("+- 250 deg/s");
     break;
   case MPU6050_RANGE_500_DEG:
-    Serial.println("+- 500 deg/s");
+    //Serial.println("+- 500 deg/s");
     break;
   case MPU6050_RANGE_1000_DEG:
-    Serial.println("+- 1000 deg/s");
+    //Serial.println("+- 1000 deg/s");
     break;
   case MPU6050_RANGE_2000_DEG:
-    Serial.println("+- 2000 deg/s");
+    //Serial.println("+- 2000 deg/s");
     break;
   }
 
   mpu.setFilterBandwidth(MPU6050_BAND_5_HZ);
-  Serial.print("Filter bandwidth set to: ");
+  //Serial.print("Filter bandwidth set to: ");
   switch (mpu.getFilterBandwidth()) {
   case MPU6050_BAND_260_HZ:
-    Serial.println("260 Hz");
+    //Serial.println("260 Hz");
     break;
   case MPU6050_BAND_184_HZ:
-    Serial.println("184 Hz");
+    //Serial.println("184 Hz");
     break;
   case MPU6050_BAND_94_HZ:
-    Serial.println("94 Hz");
+    //Serial.println("94 Hz");
     break;
   case MPU6050_BAND_44_HZ:
-    Serial.println("44 Hz");
+    //Serial.println("44 Hz");
     break;
   case MPU6050_BAND_21_HZ:
-    Serial.println("21 Hz");
+    //Serial.println("21 Hz");
     break;
   case MPU6050_BAND_10_HZ:
-    Serial.println("10 Hz");
+    //Serial.println("10 Hz");
     break;
   case MPU6050_BAND_5_HZ:
-    Serial.println("5 Hz");
+    //Serial.println("5 Hz");
     break;
   }
 
-  Serial.println("");
+  //Serial.println("");
   delay(100);
 
     // Setup the Bluepad32 callbacks
