@@ -22,16 +22,16 @@ float prevPitchError = 0;
 float prevRollError = 0;
 float prevYawError = 0;
 
-const float rollP = 10;
-const float pitchP = 10;
-const float yawP = 20.0;
+const float rollP = 12;
+const float pitchP = 12;
+const float yawP = 22.0;
 
-const float rollI = 60.;
-const float pitchI = 60.;
-const float yawI = 80.;
+const float rollI = 50.;
+const float pitchI = 50.;
+const float yawI = 70.;
 
-const float rollD = 0.75;
-const float pitchD = 0.75;
+const float rollD = 0.5;
+const float pitchD = 0.5;
 const float yawD = 0.0;
 
 float gx,gy,gz;
@@ -46,6 +46,8 @@ const float minPof = 1000;
 const float maxPof = 2000;
 
 const int incrementStep = 1;
+
+bool setup_done = false;
 
 
 struct {
@@ -124,6 +126,7 @@ void dumpGamepad(ControllerPtr ctl) {
         ctl->axisRY(),       // (-511 - 512) right Y axis
         ctl->brake(),        // (0 - 1023): brake button
         ctl->throttle()      // (0 - 1023): throttle (AKA gas) button
+        
     );
 }
 
@@ -165,15 +168,15 @@ void processGamepad(ControllerPtr ctl) {
   
       }
   
-      if(ctl->battery()<20) {
-       Serial.println("Battery low");
-      }
+  
+      Serial.println(ctl->battery());
   
       ctl->setColorLED(color.r, color.g, color.b);
 
 
       // Lock the controller
     if(!locked) {
+      if(setup_done) {
 // updates target values
 target.pitch = ctl->axisY(); 
 target.roll = ctl-> axisX();
@@ -203,7 +206,46 @@ if ((target.roll > -10) && (target.roll < 10)){
 if (target.lift < 20){
    target.lift = 0;
  }
-    }      
+ if(ctl->b() && ctl->y()) {
+  prevIPitchError = 0;
+  prevIRollError = 0;
+  prevIYawError = 0;
+}
+    } else {
+      ctl->setColorLED(255, 0, 128);
+      
+    ledcSetup(0, 50, 16);
+    ledcSetup(1, 50, 16);
+    ledcSetup(2, 50, 16);
+    ledcSetup(3, 50, 16);
+
+    ledcAttachPin(MOTORRF, 0);
+    ledcAttachPin(MOTORRB, 1);
+    ledcAttachPin(MOTORLF, 2);
+    ledcAttachPin(MOTORLB, 3);
+
+    ledcWriteMicroseconds(0, 1000);
+    delay(50)
+    ledcWriteMicroseconds(1, 1000);
+    delay(50)
+    ledcWriteMicroseconds(2, 1000);
+    delay(50)
+    ledcWriteMicroseconds(3, 1000);
+    delay(5000)
+
+    ledcWriteMicroseconds(0, 1000);
+    ledcWriteMicroseconds(1, 1000);
+    ledcWriteMicroseconds(2, 1000);
+    ledcWriteMicroseconds(3, 1000);
+
+    delay(3000);  // Allow ESCs to finish calibration
+
+    setup_done = true;
+
+    ctl->setColorLED(color.r, color.g, color.b);
+
+    }
+  }
     
 }
 
@@ -263,8 +305,8 @@ void motorSetup() {
 
 void calculateAction() {
 
-  float desiredRoll = map(target.roll, -512, 512, -2, 2);
-  float desiredPitch = map(target.pitch, -512, 512, 2, -2);
+  float desiredRoll = map(target.roll, -512, 512, -1, 1);
+  float desiredPitch = map(target.pitch, -512, 512, 1, -1);
   float desiredYaw = map(target.yaw, -512, 512, -4, 4);
 
   float errorRoll = (desiredRoll - gy);
@@ -344,37 +386,6 @@ void setup() {
       }
     }
 
-    ledcSetup(0, 50, 16);
-    ledcSetup(1, 50, 16);
-    ledcSetup(2, 50, 16);
-    ledcSetup(3, 50, 16);
-
-    ledcAttachPin(MOTORRF, 0);
-    ledcAttachPin(MOTORRB, 1);
-    ledcAttachPin(MOTORLF, 2);
-    ledcAttachPin(MOTORLB, 3);
-
-    ledcWriteMicroseconds(0, 2000);
-    ledcWriteMicroseconds(1, 2000);
-    ledcWriteMicroseconds(2, 2000);
-    ledcWriteMicroseconds(3, 2000);
-
-    Serial.println(">>> CONNECT BATTERY NOW <<<");
-    delay(5000);  // Wait for ESCs to register max throttle (beeping)
-
-    ledcWriteMicroseconds(0, 1000);
-    ledcWriteMicroseconds(1, 1000);
-    ledcWriteMicroseconds(2, 1000);
-    ledcWriteMicroseconds(3, 1000);
-
-    Serial.println("ESCs should beep and arm now.");
-    delay(3000);  // Allow ESCs to finish calibration
-
-    Serial.println("calibration done");
-
-    
-
-    Serial.println("MPU6050 Found!");
 
     mpu.setAccelerometerRange(MPU6050_RANGE_16_G);
     Serial.print("Accelerometer range set to: ");
