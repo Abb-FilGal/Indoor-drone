@@ -11,6 +11,9 @@
 #define MOTORLF 27
 #define MOTORLB 33
 
+#define BUTTON_L1 0x10
+#define BUTTON_R1 0x20
+
 ControllerPtr myController;
 
 Adafruit_MPU6050 mpu;
@@ -238,14 +241,11 @@ if (target.lift < 20){
     ledcAttachPin(MOTORLF, 2);
     ledcAttachPin(MOTORLB, 3);
 
-    ledcWriteMicroseconds(0, 1000);
-    delay(50)
-    ledcWriteMicroseconds(1, 1000);
-    delay(50)
-    ledcWriteMicroseconds(2, 1000);
-    delay(50)
-    ledcWriteMicroseconds(3, 1000);
-    delay(5000)
+    ledcWriteMicroseconds(0, 2000);
+    ledcWriteMicroseconds(1, 2000);
+    ledcWriteMicroseconds(2, 2000);
+    ledcWriteMicroseconds(3, 2000);
+    delay(5000);
 
     ledcWriteMicroseconds(0, 1000);
     ledcWriteMicroseconds(1, 1000);
