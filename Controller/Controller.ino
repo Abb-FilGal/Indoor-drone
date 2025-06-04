@@ -26,9 +26,9 @@ float prevPitchError = 0;
 float prevRollError = 0;
 float prevYawError = 0;
 
-const float rollP = 300;
-const float pitchP = 300;
-const float yawP = 300;
+const float rollP = 200;
+const float pitchP = 200;
+const float yawP = 200;
 
 float rollInt = 0.;
 float pitchInt = 0.;
@@ -262,7 +262,7 @@ void writeToMotors(){
     prevIYawError = 0;
     
   } else {
-    motorThrottle = map(target.lift, 20, 1024, 1200, 2000);
+    motorThrottle = map(target.lift, 20, 1024, 1000, 1500);
   
   //Serial.print("Throttle Power: ");
   //Serial.println(motorThrottle);
