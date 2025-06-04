@@ -15,27 +15,31 @@
 #define BUTTON_R1 0x20
 
 ControllerPtr myController;
-
 Adafruit_MPU6050 mpu;
+
+//timer code 
+
+unsigned long lastLoopTime = 0;
+const unsigned long LOOP_INTERVAL = 4000; 
 
 float prevPitchError = 0;
 float prevRollError = 0;
 float prevYawError = 0;
 
-const float rollP = 12;
-const float pitchP = 12;
-const float yawP = 22.0;
+const float rollP = 300;
+const float pitchP = 300;
+const float yawP = 300;
 
 float rollInt = 0.;
 float pitchInt = 0.;
 
-const float rollI = 0.; //50.
-const float pitchI = 0.; //50.
+const float rollI = 0; //50.
+const float pitchI = 0; //50.
 const float yawI = 0.;// 80.
 
 const float rollD = 0.; //0.5
 const float pitchD = 0.; //0.5
-const float yawD = 0.0;
+const float yawD = 0.;
 
 float gx,gy,gz;
 float ax,ay,az;
@@ -182,7 +186,6 @@ void processGamepad(ControllerPtr ctl) {
 
       // Lock the controller
     if(!locked) {
-      if(setup_done) {
 // updates target values
 target.pitch = ctl->axisY(); 
 target.roll = ctl-> axisX();
@@ -228,37 +231,7 @@ if (target.lift < 20){
   rollInt = 0.;
   pitchInt = 0.;
 }
-    } else {
-      ctl->setColorLED(255, 0, 128);
-      
-    ledcSetup(0, 50, 16);
-    ledcSetup(1, 50, 16);
-    ledcSetup(2, 50, 16);
-    ledcSetup(3, 50, 16);
-
-    ledcAttachPin(MOTORRF, 0);
-    ledcAttachPin(MOTORRB, 1);
-    ledcAttachPin(MOTORLF, 2);
-    ledcAttachPin(MOTORLB, 3);
-
-    ledcWriteMicroseconds(0, 2000);
-    ledcWriteMicroseconds(1, 2000);
-    ledcWriteMicroseconds(2, 2000);
-    ledcWriteMicroseconds(3, 2000);
-    delay(5000);
-
-    ledcWriteMicroseconds(0, 1000);
-    ledcWriteMicroseconds(1, 1000);
-    ledcWriteMicroseconds(2, 1000);
-    ledcWriteMicroseconds(3, 1000);
-
-    delay(3000);  // Allow ESCs to finish calibration
-
-    setup_done = true;
-
-    ctl->setColorLED(color.r, color.g, color.b);
-
-    }
+    
   }
     
 }
@@ -333,13 +306,7 @@ void calculateAction() {
   float currentPitchAngle = gain*pitchInt + (1.-gain)*accelerometerPitch;
 
 
-  // prints for testing angle calculation
-  Serial.print("RollAngle:");
-  Serial.print(currentRollAngle);
-  Serial.print(",");
-  Serial.print("PitchAngle:");
-  Serial.println(currentPitchAngle);
-  
+  // prints for testing angle calculation were here
 
   float errorRoll = (desiredRoll - currentRollAngle);
   float errorPitch = (desiredPitch - currentPitchAngle);
@@ -412,6 +379,32 @@ void ledcWriteMicroseconds(uint8_t channel, uint16_t microseconds) {
 
 void setup() {
     Serial.begin(115200);
+
+  
+
+    ledcSetup(0, 50, 16);
+    ledcSetup(1, 50, 16);
+    ledcSetup(2, 50, 16);
+    ledcSetup(3, 50, 16);
+
+    ledcAttachPin(MOTORRF, 0);
+    ledcAttachPin(MOTORRB, 1);
+    ledcAttachPin(MOTORLF, 2);
+    ledcAttachPin(MOTORLB, 3);
+
+    ledcWriteMicroseconds(0, 2000);
+    ledcWriteMicroseconds(1, 2000);
+    ledcWriteMicroseconds(2, 2000);
+    ledcWriteMicroseconds(3, 2000);
+    delay(5000);
+
+    ledcWriteMicroseconds(0, 1000);
+    ledcWriteMicroseconds(1, 1000);
+    ledcWriteMicroseconds(2, 1000);
+    ledcWriteMicroseconds(3, 1000);
+
+    delay(3000);  // Allow ESCs to finish calibration
+
     //Serial.printf("Firmware: %s\n", BP32.firmwareVersion());
     const uint8_t* addr = BP32.localBdAddress();
     //Serial.printf("BD Addr: %2X:%2X:%2X:%2X:%2X:%2X\n", addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]);
@@ -502,6 +495,13 @@ void setup() {
 
 void loop() {
 
+    unsigned long now = micros();
+
+    if (now - lastLoopTime >= LOOP_INTERVAL) {
+    lastLoopTime = now;
+
+    
+
     // Update controller data
     bool dataUpdated = BP32.update();
     if (dataUpdated)
@@ -519,6 +519,7 @@ void loop() {
 
     // perform actions
     writeToMotors();
+  }
 
-    delay(4);
+    yield();
 }

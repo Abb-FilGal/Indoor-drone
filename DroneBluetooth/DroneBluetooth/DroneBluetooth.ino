@@ -1,7 +1,6 @@
 #include <BLEDevice.h>
 #include <BLEUtils.h>
 #include <BLEServer.h>
-#include <BLE2902.h>
 
 
 // UUIDs
@@ -16,7 +15,7 @@
 
 // Telemetry UUIDs
 #define TELEMETRY_SERVICE_UUID    "a1209824-94ff-4ed8-a3b3-50f0a9c41325"
-#define ALTITUDE_CHAR_UUID        "1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d"
+#define ANGLE_CHAR_UUID        "1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d"
 #define SPEED_CHAR_UUID           "2a3b4c5d-6e7f-8a9b-0c1d-2e3f4a5b6c7d"
 #define GPS_CHAR_UUID             "3a4b5c6d-7e8f-9a0b-1c2d-3e4f5a6b7c8d"
 
@@ -28,7 +27,7 @@
 // Global variables
 BLECharacteristic* pBatteryLevelCharacteristic;
 BLECharacteristic* pCommandCharacteristic;
-BLECharacteristic* pAltitudeCharacteristic;
+BLECharacteristic* pAngleCharacteristic;
 BLECharacteristic* pSpeedCharacteristic;
 BLECharacteristic* pGPSCharacteristic;
 BLECharacteristic* pFlightModeCharacteristic;
@@ -86,15 +85,15 @@ void setup() {
 
   // === Telemetry Service ===
   BLEService *pTelemetryService = pServer->createService(TELEMETRY_SERVICE_UUID);
-  pAltitudeCharacteristic = pTelemetryService->createCharacteristic(ALTITUDE_CHAR_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+  pAngleCharacteristic = pTelemetryService->createCharacteristic(ANGLE_CHAR_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
   pSpeedCharacteristic = pTelemetryService->createCharacteristic(SPEED_CHAR_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
   pGPSCharacteristic = pTelemetryService->createCharacteristic(GPS_CHAR_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
 
-  pAltitudeCharacteristic->addDescriptor(new BLE2902());
+  pAngleCharacteristic->addDescriptor(new BLE2902());
   pSpeedCharacteristic->addDescriptor(new BLE2902());
   pGPSCharacteristic->addDescriptor(new BLE2902());
 
-  pAltitudeCharacteristic->setValue("0.0 m");
+  pAngleCharacteristic->setValue("0.0 m");
   pSpeedCharacteristic->setValue("0.0 m/s");
   pGPSCharacteristic->setValue("0.000000, 0.000000");
   pTelemetryService->start();
@@ -140,8 +139,8 @@ void loop() {
 
   char altStr[10];
   sprintf(altStr, "%.1f m", altitude);
-  pAltitudeCharacteristic->setValue(altStr);
-  pAltitudeCharacteristic->notify();
+  pAngleCharacteristic->setValue(altStr);
+  pAngleCharacteristic->notify();
 
   char speedStr[10];
   sprintf(speedStr, "%.1f m/s", speed);
